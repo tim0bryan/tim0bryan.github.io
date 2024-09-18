@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Studio Clock</title>
+    <style>
+        @font-face {
+            font-family: 'Segment7';
+            src: local('Segment7'), local('7-Segment');
+        }
+
+        body {
+            background-color: black;
+            margin: 0;
+            display: flex;
+            flex-direction: column; /* Stack elements vertically */
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            position: relative; /* For positioning controls */
+        }
+
+        #clock {
+            color: red;
+            font-family: 'Segment7', monospace;
+            text-align: center;
+            width: 100%;
+            white-space: nowrap;
+            overflow: hidden;
+            margin: 0;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            opacity: 0; /* Start hidden */
+            transition: opacity 0.5s;
+        }
+
+        #controls.show {
+            opacity: 1; /* Show controls */
+        }
+
+        .control-button {
+            font-size: 1em;
+            background-color: black;
+            color: red;
+            border: 1px solid red;
+            font-family: 'Segment7', monospace;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+
+        .control-button.active {
+            background-color: red;
+            color: black;
+        }
+
+        #frameRateSelector,
+        #timeoutSelector {
+            font-size: 1em;
+            background-color: black;
+            color: red;
+            border: 1px solid red;
+            font-family: 'Segment7', monospace;
+            padding: 5px;
+            appearance: none; /* Remove default styling */
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            position: relative;
+            padding-right: 30px; /* Space for custom arrow */
+        }
+
+        /* Custom dropdown arrow */
+        #frameRateSelector::after,
+        #timeoutSelector::after {
+            content: '';
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            width: 0;
+            height: 0;
+            pointer-events: none;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid red;
+            transform: translateY(-50%);
+        }
+
+        /* Hide default arrow in Firefox */
+        select::-ms-expand {
+            display: none;
+        }
+
+        /* For Firefox */
+        select {
+            background-image: none !important;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="clock"></h1>
+
+    <!-- Controls -->
+    <div id="controls">
+        <select id="frameRateSelector">
+            <option value="23.976">23.976 fps</option>
+            <option value="24" selected>24 fps</option>
+            <option value="25">25 fps</option>
+            <option value="29.97">29.97 fps</option>
+            <option value="30">30 fps</option>
+            <option value="50">50 fps</option>
+            <option value="59.94">59.94 fps</option>
+            <option value="60">60 fps</option>
+        </select>
+        <button id="toggleTimecode" class="control-button">Hide Timecode</button>
+        <button id="toggleAMPM" class="control-button">Show AM/PM</button>
+        <select id="timeoutSelector">
+            <option value="0">UI Timeout: Immediate</option>
+            <option value="2000">UI Timeout: 2 Seconds</option>
+            <option value="5000" selected>UI Timeout: 5 Seconds</option>
+            <option value="10000">UI Timeout: 10 Seconds</option>
+            <option value="-1">UI Timeout: Always On</option>
+        </select>
+        <button id="toggleUI" class="control-button">Keep UI On</button>
+    </div>
+
+    <script>
+        let frameRate = 24; // Default frame rate
+        let showTimecode = true; // Default to showing timecode
+        let showAMPM = false; // AM/PM indicator off by default
+        let frameInterval;
+        let uiTimeoutDuration = 5000; // Default UI timeout duration
+        let uiAlwaysOn = false; // UI is not always on by default
+
+        function updateDisplay() {
+            const now = new Date();
+            let hours = now.getHours();
+            let ampm = '';
+
+            if (showAMPM) {
+                ampm = hours >= 12 ? ' PM' : ' AM';
+            }
+
+            hours = hours % 12 || 12; // 12-hour format
+            hours = String(hours).padStart(2, '0'); // Format hours to two digits
+            const minutes = String(now.getMinutes()).padStart(2, '0'); // Two-digit minutes
+            const seconds = String(now.getSeconds()).padStart(2, '0'); // Two-digit seconds
+
+            let timeString = `${hours}:${minutes}:${seconds}`;
+
+            if (showTimecode) {
+                // Calculate the frame number based on the milliseconds and frame rate
+                const milliseconds = now.getMilliseconds();
+                const totalFrames = Math.round(frameRate);
+                const frameNumber = Math.floor((milliseconds / 1000) * frameRate) % totalFrames;
+                const frames = String(frameNumber).padStart(2, '0'); // Two-digit frames
+
+                timeString += `:${frames}`;
+            }
+
+            timeString += ampm;
+
+            // Update the clock display
+            document.getElementById('clock').textContent = timeString;
+        }
+
+        function adjustFontSize() {
+            const clock = document.getElementById('clock');
+            let fontSize = 50; // Start with a large font size
+            clock.style.fontSize = fontSize + 'vw';
+
+            // Reduce font size until the clock fits within the window
+            while (clock.scrollWidth > window.innerWidth && fontSize > 0) {
+                fontSize -= 0.5;
+                clock.style.fontSize = fontSize + 'vw';
+            }
+        }
+
+        function startClock() {
+            // Clear any existing intervals
+            if (frameInterval) clearInterval(frameInterval);
+
+            // Start the update interval
+            updateDisplay(); // Initial display
+            frameInterval = setInterval(updateDisplay, 1000 / frameRate);
+        }
+
+        function handleFrameRateChange() {
+            const selector = document.getElementById('frameRateSelector');
+            frameRate = parseFloat(selector.value);
+
+            // Restart the clock with the new frame rate
+            startClock();
+        }
+
+        function toggleTimecodeDisplay() {
+            showTimecode = !showTimecode;
+            if (showTimecode && showAMPM) {
+                showAMPM = false;
+                document.getElementById('toggleAMPM').textContent = 'Show AM/PM';
+            }
+            document.getElementById('toggleTimecode').textContent = showTimecode ? 'Hide Timecode' : 'Show Timecode';
+            updateDisplay();
+            adjustFontSize();
+        }
+
+        function toggleAMPMDisplay() {
+            showAMPM = !showAMPM;
+            if (showAMPM && showTimecode) {
+                showTimecode = false;
+                document.getElementById('toggleTimecode').textContent = 'Show Timecode';
+            }
+            document.getElementById('toggleAMPM').textContent = showAMPM ? 'Hide AM/PM' : 'Show AM/PM';
+            updateDisplay();
+            adjustFontSize();
+        }
+
+        function handleTimeoutChange() {
+            const selector = document.getElementById('timeoutSelector');
+            uiTimeoutDuration = parseInt(selector.value, 10);
+
+            // If UI is set to always on, make sure the toggle button reflects that
+            if (uiTimeoutDuration === -1) {
+                uiAlwaysOn = true;
+                document.getElementById('toggleUI').classList.add('active');
+                document.getElementById('toggleUI').textContent = 'UI Always On';
+                showControls(); // Keep controls visible
+            } else {
+                uiAlwaysOn = false;
+                document.getElementById('toggleUI').classList.remove('active');
+                document.getElementById('toggleUI').textContent = 'Keep UI On';
+            }
+        }
+
+        function toggleUIAlwaysOn() {
+            uiAlwaysOn = !uiAlwaysOn;
+            if (uiAlwaysOn) {
+                uiTimeoutDuration = -1;
+                document.getElementById('toggleUI').classList.add('active');
+                document.getElementById('toggleUI').textContent = 'UI Always On';
+                document.getElementById('timeoutSelector').value = '-1';
+                showControls(); // Keep controls visible
+            } else {
+                uiTimeoutDuration = parseInt(document.getElementById('timeoutSelector').value, 10);
+                document.getElementById('toggleUI').classList.remove('active');
+                document.getElementById('toggleUI').textContent = 'Keep UI On';
+                // Start the timeout to hide controls if necessary
+                startHideControlsTimeout();
+            }
+        }
+
+        function showControls() {
+            const controls = document.getElementById('controls');
+            controls.classList.add('show');
+
+            // Clear any existing timer
+            if (window.hideControlsTimeout) {
+                clearTimeout(window.hideControlsTimeout);
+            }
+
+            // Set timer to hide controls after the specified duration, unless always on
+            if (uiTimeoutDuration > 0 && !uiAlwaysOn) {
+                window.hideControlsTimeout = setTimeout(() => {
+                    controls.classList.remove('show');
+                }, uiTimeoutDuration);
+            }
+        }
+
+        function startHideControlsTimeout() {
+            // Hide controls after the specified timeout, unless always on
+            if (uiTimeoutDuration > 0 && !uiAlwaysOn) {
+                window.hideControlsTimeout = setTimeout(() => {
+                    document.getElementById('controls').classList.remove('show');
+                }, uiTimeoutDuration);
+            }
+        }
+
+        // Event listeners for user interaction
+        ['mousemove', 'click', 'keydown', 'wheel', 'touchstart'].forEach(event => {
+            document.addEventListener(event, showControls);
+        });
+
+        window.addEventListener('resize', () => {
+            adjustFontSize();
+            updateDisplay();
+        });
+
+        window.addEventListener('load', () => {
+            adjustFontSize(); // Adjust font size on initial load
+            handleFrameRateChange(); // Start clock with default frame rate
+            updateDisplay(); // Initial display
+            showControls(); // Show controls on load
+        });
+
+        // Add event listeners for controls
+        document.getElementById('frameRateSelector').addEventListener('change', handleFrameRateChange);
+        document.getElementById('toggleTimecode').addEventListener('click', toggleTimecodeDisplay);
+        document.getElementById('toggleAMPM').addEventListener('click', toggleAMPMDisplay);
+        document.getElementById('timeoutSelector').addEventListener('change', handleTimeoutChange);
+        document.getElementById('toggleUI').addEventListener('click', toggleUIAlwaysOn);
+    </script>
+</body>
+</html>
